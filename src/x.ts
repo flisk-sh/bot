@@ -32,6 +32,7 @@ export const X_CONFIGURED = (e: XEnv) =>
 		e.CHAT_ANSWER_KEY
 	);
 
+const byCode = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0); // OAuth sorts by byte value, not by locale
 const enc = (s: string) =>
 	encodeURIComponent(s).replace(
 		/[!'()*]/g,
@@ -58,7 +59,7 @@ export async function oauthHeader(
 	};
 	const all = { ...query, ...oauth };
 	const base = Object.keys(all)
-		.sort()
+		.sort(byCode)
 		.map((k) => `${enc(k)}=${enc(all[k])}`)
 		.join("&");
 	const toSign = `${method.toUpperCase()}&${enc(url)}&${enc(base)}`;
@@ -76,7 +77,7 @@ export async function oauthHeader(
 	);
 	const fields = { ...oauth, oauth_signature: sig };
 	return `OAuth ${Object.keys(fields)
-		.sort()
+		.sort(byCode)
 		.map((k) => `${enc(k)}="${enc(fields[k as keyof typeof fields])}"`)
 		.join(", ")}`;
 }
@@ -147,7 +148,7 @@ export async function xPass(
 		const url = `${X_API}${path}`;
 		const qs = Object.keys(query).length
 			? `?${Object.keys(query)
-					.sort()
+					.sort(byCode)
 					.map((k) => `${enc(k)}=${enc(query[k])}`)
 					.join("&")}`
 			: "";
