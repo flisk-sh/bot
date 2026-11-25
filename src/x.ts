@@ -176,6 +176,34 @@ export async function xPass(
 		};
 	};
 
+	// A picture chat drew (a data: URL) is uploaded to X, and its id goes on the reply. null when X refuses it.
+	const upload = async (dataUrl: string): Promise<string | null> => {
+		const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(
+			dataUrl,
+		);
+		if (!m) return null;
+		const form = new FormData();
+		form.set(
+			"media",
+			new Blob([Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0))], {
+				type: m[1],
+			}),
+			"flisk.jpg",
+		);
+		form.set("media_category", "tweet_image");
+		const url = `${X_API}/media/upload`;
+		const res = await fetchImpl(url, {
+			method: "POST",
+			headers: { authorization: await oauthHeader("POST", url, {}, env) },
+			body: form,
+			signal: AbortSignal.timeout(20000),
+		});
+		const j = (await res.json().catch(() => ({}))) as {
+			data?: { id?: string };
+		};
+		return res.status < 300 ? (j?.data?.id ?? null) : null;
+	};
+
 	let me = await getState(env.DB, "x_user_id");
 	if (!me) {
 		const r = await call("GET", "/users/me");
@@ -284,6 +312,7 @@ export async function xPass(
 		}
 		const body = (await a.json().catch(() => ({}))) as {
 			text?: string;
+			image?: string;
 			kind?: string;
 		};
 		if (a.status === 429 && body.kind === "day") {
@@ -296,16 +325,28 @@ export async function xPass(
 			continue;
 		}
 		if (!live) {
-			log(`x dry run: @${who} asked "${question}" -> "${body.text}"`);
+			log(
+				`x dry run: @${who} asked "${question}" -> "${body.text}"${body.image ? ` (+ picture, ${body.image.length} chars)` : ""}`,
+			);
 			out.dry++;
 			await done();
 			continue;
 		}
+		const mediaId = body.image
+			? await upload(body.image).catch(() => null)
+			: null;
 		const post = await call(
 			"POST",
 			"/tweets",
 			{},
-			{ text: body.text, reply: { in_reply_to_tweet_id: m.id } },
+			{
+				text:
+					body.image && !mediaId
+						? "I drew it but X would not take the picture. Try again in a minute."
+						: body.text,
+				reply: { in_reply_to_tweet_id: m.id },
+				...(mediaId ? { media: { media_ids: [mediaId] } } : {}),
+			},
 		);
 		if (post.status === 201) {
 			out.answered++;

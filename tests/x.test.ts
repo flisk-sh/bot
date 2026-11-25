@@ -43,11 +43,16 @@ function world(
 ) {
 	const posts: any[] = [];
 	const asked: any[] = [];
+	const uploads: FormData[] = [];
 	const f = (async (url: string, init: RequestInit = {}) => {
 		const u = String(url);
 		if (u.includes("/users/me")) return Response.json({ data: { id: "99" } });
 		if (u.includes("/mentions"))
 			return Response.json({ data: mentions, includes: { users, tweets } });
+		if (u.endsWith("/media/upload")) {
+			uploads.push(init.body as FormData);
+			return Response.json({ data: { id: "m1" } });
+		}
 		if (u.endsWith("/tweets")) {
 			posts.push(JSON.parse(String(init.body)));
 			return Response.json({ data: { id: "1" } }, { status: 201 });
@@ -58,7 +63,7 @@ function world(
 		}
 		return new Response("?", { status: 404 });
 	}) as unknown as typeof fetch;
-	return { f, posts, asked };
+	return { f, posts, asked, uploads };
 }
 
 test("questionOf drops the reply chain and the handle", () => {
@@ -205,4 +210,31 @@ test("the post a mention replies to is sent to chat as context", async () => {
 		asker: "5",
 		context: "Google just shipped Gemini 4 Neon",
 	});
+});
+
+test("a picture from chat is uploaded and attached to the reply", async () => {
+	const { db } = fakeDb({ x_user_id: "99" });
+	const w = world(
+		[
+			{
+				id: "60",
+				text: "@askflisk draw image of cat eating spaghetti",
+				author_id: "5",
+			},
+		],
+		[{ id: "5", username: "bob" }],
+		{
+			status: 200,
+			body: {
+				text: "Here you go.",
+				image: "data:image/jpeg;base64,/9j/AAAA",
+			} as any,
+		},
+	);
+	const r = await xPass(base(db, { X_REPLY_LIVE: "1" }), w.f);
+	expect(r.answered).toBe(1);
+	expect(w.uploads).toHaveLength(1);
+	expect(w.uploads[0].get("media_category")).toBe("tweet_image");
+	expect(w.posts[0].media).toEqual({ media_ids: ["m1"] });
+	expect(w.posts[0].text).toBe("Here you go.");
 });
