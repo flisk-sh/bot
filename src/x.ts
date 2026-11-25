@@ -216,6 +216,12 @@ export async function xPass(
 		return res.status < 300 ? (j?.data?.id ?? null) : null;
 	};
 
+	// The link of an app goes to the asker by DM: X drops posts that carry a link. true when X took the message.
+	const dm = async (userId: string, text: string): Promise<boolean> => {
+		const r = await call("POST", `/dm_conversations/with/${userId}/messages`, {}, { text });
+		return r.status === 201;
+	};
+
 	let me = await getState(env.DB, "x_user_id");
 	if (!me) {
 		const r = await call("GET", "/users/me");
@@ -414,17 +420,26 @@ export async function xPass(
 			await done();
 			continue;
 		}
-		const tweetText = body.link ? `${body.text} ${body.link}` : body.text;
 		const mediaId = body.image
 			? await upload(body.image).catch(() => null)
 			: null;
+		// An app with its picture: the post shows the picture and the link goes by DM. If either step fails the link goes in the post as before.
+		const dmSent =
+			body.link && mediaId
+				? await dm(m.author_id, `${body.text} ${body.link}`).catch(() => false)
+				: false;
+		const tweetText = dmSent
+			? `${body.text} I sent you the link in a DM.`
+			: body.link
+				? `${body.text} ${body.link}`
+				: body.text;
 		const post = await call(
 			"POST",
 			"/tweets",
 			{},
 			{
 				text:
-					body.image && !mediaId
+					body.image && !mediaId && !body.link
 						? "I drew it but X would not take the picture. Try again in a minute."
 						: tweetText,
 				reply: { in_reply_to_tweet_id: m.id },

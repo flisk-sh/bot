@@ -71,4 +71,6 @@ Post `@askflisk weather in london` and the bot replies with the answer from [cha
 4. Deploy. It starts in a dry run: `bunx wrangler@4 tail` shows `x dry run: @someone asked ... -> ...` and nothing is posted.
 5. When the answers look right, set `X_REPLY_LIVE = "1"` in `wrangler.toml` and deploy again.
 
+An app chat built is posted as a screenshot of it, and its link is sent to the asker by DM (X drops posts that carry a link). This needs the Access Token to have Read, Write and Direct Messages permission (regenerate it after changing the app's permissions) and chat's `CF_ACCOUNT_ID` / `CF_BROWSER_TOKEN` for the screenshot. If the DM is refused, or chat has no screenshot, the link goes in the post as before.
+
 @brookservers can post `@askflisk pause` or `@askflisk resume`. A pause drops the mentions that arrive while it lasts. Chat caps each asker at 10 answers and everyone at 500 a day.

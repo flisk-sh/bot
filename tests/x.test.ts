@@ -42,10 +42,12 @@ function world(
 	tweets: object[] = [],
 	media: object[] = [],
 	lookup: object | null = null,
+	dmStatus = 201,
 ) {
 	const posts: any[] = [];
 	const asked: any[] = [];
 	const uploads: FormData[] = [];
+	const dms: any[] = [];
 	const f = (async (url: string, init: RequestInit = {}) => {
 		const u = String(url);
 		if (u.includes("/users/me")) return Response.json({ data: { id: "99" } });
@@ -59,6 +61,12 @@ function world(
 			uploads.push(init.body as FormData);
 			return Response.json({ data: { id: "m1" } });
 		}
+		if (/\/dm_conversations\/with\/\d+\/messages$/.test(u)) {
+			dms.push({ to: u.match(/with\/(\d+)/)![1], ...JSON.parse(String(init.body)) });
+			return dmStatus === 201
+				? Response.json({ data: { dm_event_id: "d1" } }, { status: 201 })
+				: new Response("no", { status: dmStatus });
+		}
 		if (u.endsWith("/tweets")) {
 			posts.push(JSON.parse(String(init.body)));
 			return Response.json({ data: { id: "1" } }, { status: 201 });
@@ -69,7 +77,7 @@ function world(
 		}
 		return new Response("?", { status: 404 });
 	}) as unknown as typeof fetch;
-	return { f, posts, asked, uploads };
+	return { f, posts, asked, uploads, dms };
 }
 
 test("questionOf drops the reply chain and the handle", () => {
@@ -311,6 +319,32 @@ test("an app chat built is posted as the answer plus its link", async () => {
 	const r = await xPass(base(db, { X_REPLY_LIVE: "1" }), w.f);
 	expect(r.answered).toBe(1);
 	expect(w.posts[0].text).toBe("Built it. https://chat.flisk.si/s/abc");
+});
+
+test("an app with its picture: the post has the picture, the link goes by DM", async () => {
+	const body = {
+		text: "Built it.",
+		link: "https://chat.flisk.si/s/abc",
+		image: "data:image/jpeg;base64,AAAA",
+	} as any;
+	const mention = [{ id: "81", text: "@askflisk make me crm", author_id: "5" }];
+	const users = [{ id: "5", username: "bob" }];
+	const { db } = fakeDb({ x_user_id: "99" });
+	const w = world(mention, users, { status: 200, body });
+	const r = await xPass(base(db, { X_REPLY_LIVE: "1" }), w.f);
+	expect(r.answered).toBe(1);
+	expect(w.dms).toEqual([
+		{ to: "5", text: "Built it. https://chat.flisk.si/s/abc" },
+	]);
+	expect(w.posts[0].text).toBe("Built it. I sent you the link in a DM.");
+	expect(w.posts[0].text).not.toContain("http");
+	expect(w.posts[0].media).toEqual({ media_ids: ["m1"] });
+	// X refuses the DM: the link goes in the post, with the picture.
+	const { db: db2 } = fakeDb({ x_user_id: "99" });
+	const w2 = world(mention, users, { status: 200, body }, [], [], null, 403);
+	await xPass(base(db2, { X_REPLY_LIVE: "1" }), w2.f);
+	expect(w2.posts[0].text).toBe("Built it. https://chat.flisk.si/s/abc");
+	expect(w2.posts[0].media).toEqual({ media_ids: ["m1"] });
 });
 
 test("the pictures of the post being replied to are sent to chat, photos only", async () => {
