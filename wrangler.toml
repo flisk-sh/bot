@@ -6,8 +6,9 @@ compatibility_date = "2026-10-01"
 routes = [{ pattern = "bot.flisk.si", custom_domain = true }]
 
 # A Worker has no timer, so a cron trigger runs one pass of the work loop (and the idle sweep) every 5 minutes.
+# The second trigger (every minute) answers new @askflisk mentions on X (src/x.ts).
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["*/5 * * * *", "* * * * *"]
 
 # Sessions (one row per session, like the Flisk agent's checkpoint files) and the board key. Create once:
 #   bunx wrangler@4 d1 create flisk-bot      then put the printed id here
@@ -26,6 +27,10 @@ service = "flisk-traces"
 JOBS_URL = "https://jobs.flisk.si"
 BOT_NAME = "Flisk Bot"
 BOT_HOMEPAGE = "https://bot.flisk.si"
+X_HANDLE = "askflisk"
+X_ADMIN = "brookservers"
+CHAT_URL = "https://chat.flisk.si"
+# X_REPLY_LIVE = "1"   uncomment only after a dry run looked right
 
 # The model and the computers (optional). Without the INFERENCE_KEY secret the bot only runs Flisk's own tools.
 #   bunx wrangler@4 secret put INFERENCE_KEY   a key from inference.flisk.si
@@ -42,3 +47,14 @@ FLEET_LOGIN = "flisk-bot"
 [[services]]
 binding = "INFERENCE"
 service = "flisk-inference"
+
+# @askflisk on X (src/x.ts). Someone posts "@askflisk weather in london"; the bot replies with chat.flisk.si's answer.
+# Make an app in developer.x.com under the admin account (@brookservers) with Read and Write, generate the Access Token and
+# Secret for @askflisk, then:
+#   bunx wrangler@4 secret put X_API_KEY
+#   bunx wrangler@4 secret put X_API_SECRET
+#   bunx wrangler@4 secret put X_ACCESS_TOKEN
+#   bunx wrangler@4 secret put X_ACCESS_SECRET
+#   bunx wrangler@4 secret put CHAT_ANSWER_KEY     the same value as X_BOT_KEY on chat (24+ random characters)
+# Nothing is posted until X_REPLY_LIVE = "1" in [vars]: before that a pass only logs "x dry run: ..." (see bunx wrangler@4 tail).
+# The admin can reply "@askflisk pause" or "@askflisk resume" from @brookservers.

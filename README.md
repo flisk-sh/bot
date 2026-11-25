@@ -60,3 +60,15 @@ This repo was split out of `flisk-sh/flisk-bot`, which is now [flisk-sh/jobs](ht
 ## License
 
 MIT
+
+## @askflisk on X
+
+Post `@askflisk weather in london` and the bot replies with the answer from [chat.flisk.si](https://chat.flisk.si) (the same free model, live weather and web search as chat, fitted to one post). A cron trigger runs every minute (`src/x.ts`), reads new mentions oldest first, answers each once and remembers the newest one (D1 `state`, key `x_since_id`).
+
+1. On chat: `bunx wrangler@4 secret put X_BOT_KEY` (24+ random characters). Chat's `POST /api/answer` answers 404 without it.
+2. In developer.x.com, under the admin account (@brookservers), make an app with Read and Write and generate the Access Token and Secret for @askflisk.
+3. Here: put `X_API_KEY`, `X_API_SECRET`, `X_ACCESS_TOKEN`, `X_ACCESS_SECRET` and `CHAT_ANSWER_KEY` (the same value as `X_BOT_KEY`) with `bunx wrangler@4 secret put`.
+4. Deploy. It starts in a dry run: `bunx wrangler@4 tail` shows `x dry run: @someone asked ... -> ...` and nothing is posted.
+5. When the answers look right, set `X_REPLY_LIVE = "1"` in `wrangler.toml` and deploy again.
+
+@brookservers can post `@askflisk pause` or `@askflisk resume`. A pause drops the mentions that arrive while it lasts. Chat caps each asker at 10 answers and everyone at 500 a day.
