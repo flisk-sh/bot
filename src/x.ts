@@ -90,6 +90,17 @@ interface Mention {
 	text: string;
 	author_id?: string;
 	referenced_tweets?: { type: string; id: string }[];
+	attachments?: { media_keys?: string[] };
+}
+
+// The pictures (photos only) of a post, as links chat can read.
+export function photosOf(
+	attachments: { media_keys?: string[] } | undefined,
+	media: Map<string, string>,
+): string[] {
+	return (attachments?.media_keys || [])
+		.map((k) => media.get(k) || "")
+		.filter(Boolean);
 }
 
 // The question in a mention: the leading @handles (the reply chain) are dropped; what is left is what the person asked.
@@ -218,8 +229,10 @@ export async function xPass(
 	const since = await getState(env.DB, "x_since_id");
 	const q: Record<string, string> = {
 		max_results: "20",
-		"tweet.fields": "author_id,referenced_tweets,created_at",
-		expansions: "author_id,referenced_tweets.id",
+		"tweet.fields": "author_id,referenced_tweets,created_at,attachments",
+		expansions:
+			"author_id,referenced_tweets.id,attachments.media_keys,referenced_tweets.id.attachments.media_keys",
+		"media.fields": "type,url",
 		"user.fields": "username",
 	};
 	if (since) q.since_id = since;
@@ -228,6 +241,8 @@ export async function xPass(
 	// the newer pages would move the cursor past the older ones. (More than MAX_PAGES x 20 pending, an old backlog: the oldest are dropped.)
 	const all: Mention[] = [];
 	const parents = new Map<string, string>();
+	const parentMedia = new Map<string, { media_keys?: string[] }>();
+	const photos = new Map<string, string>();
 	const names = new Map<string, string>();
 	let token: string | undefined;
 	for (let page = 0; page < MAX_PAGES; page++) {
@@ -245,8 +260,17 @@ export async function xPass(
 		for (const t of (r.json.includes?.tweets || []) as {
 			id: string;
 			text: string;
-		}[])
+			attachments?: { media_keys?: string[] };
+		}[]) {
 			parents.set(t.id, t.text);
+			if (t.attachments) parentMedia.set(t.id, t.attachments);
+		}
+		for (const md of (r.json.includes?.media || []) as {
+			media_key: string;
+			type: string;
+			url?: string;
+		}[])
+			if (md.type === "photo" && md.url) photos.set(md.media_key, md.url);
 		for (const u of (r.json.includes?.users || []) as {
 			id: string;
 			username: string;
@@ -303,6 +327,14 @@ export async function xPass(
 			continue;
 		}
 		handled++;
+		const parentId = (m.referenced_tweets || []).find(
+			(t) => t.type === "replied_to",
+		)?.id;
+		// The pictures of the post being replied to, then the mention's own: "is this ranking right?" is about the picture.
+		const images = [
+			...photosOf(parentMedia.get(parentId || ""), photos),
+			...photosOf(m.attachments, photos),
+		].slice(0, 2);
 		const chat = (env.CHAT_URL || "https://chat.flisk.si").replace(/\/+$/, "");
 		const a = await fetchImpl(`${chat}/api/answer`, {
 			method: "POST",
@@ -313,6 +345,7 @@ export async function xPass(
 			body: JSON.stringify({
 				question,
 				asker: m.author_id,
+				...(images.length ? { images } : {}),
 				context: parents.get(
 					(m.referenced_tweets || []).find((t) => t.type === "replied_to")
 						?.id || "",

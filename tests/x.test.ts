@@ -40,6 +40,7 @@ function world(
 	users: object[],
 	chat = { status: 200, body: { text: "London: rain, 9°C." } },
 	tweets: object[] = [],
+	media: object[] = [],
 ) {
 	const posts: any[] = [];
 	const asked: any[] = [];
@@ -48,7 +49,10 @@ function world(
 		const u = String(url);
 		if (u.includes("/users/me")) return Response.json({ data: { id: "99" } });
 		if (u.includes("/mentions"))
-			return Response.json({ data: mentions, includes: { users, tweets } });
+			return Response.json({
+				data: mentions,
+				includes: { users, tweets, media },
+			});
 		if (u.endsWith("/media/upload")) {
 			uploads.push(init.body as FormData);
 			return Response.json({ data: { id: "m1" } });
@@ -305,4 +309,43 @@ test("an app chat built is posted as the answer plus its link", async () => {
 	const r = await xPass(base(db, { X_REPLY_LIVE: "1" }), w.f);
 	expect(r.answered).toBe(1);
 	expect(w.posts[0].text).toBe("Built it. https://chat.flisk.si/s/abc");
+});
+
+test("the pictures of the post being replied to are sent to chat, photos only", async () => {
+	const { db } = fakeDb({ x_user_id: "99" });
+	const w = world(
+		[
+			{
+				id: "90",
+				text: "@askflisk missing askflisk",
+				author_id: "5",
+				referenced_tweets: [{ type: "replied_to", id: "70" }],
+			},
+		],
+		[{ id: "5", username: "bob" }],
+		{ status: 200, body: { text: "Not on the list." } },
+		[
+			{
+				id: "70",
+				text: "AI agent tiers",
+				attachments: { media_keys: ["m1", "v1"] },
+			},
+		],
+		[
+			{
+				media_key: "m1",
+				type: "photo",
+				url: "https://pbs.twimg.com/media/A.jpg",
+			},
+			{
+				media_key: "v1",
+				type: "video",
+				url: "https://pbs.twimg.com/media/V.jpg",
+			},
+		],
+	);
+	const r = await xPass(base(db, { X_REPLY_LIVE: "1" }), w.f);
+	expect(r.answered).toBe(1);
+	expect(w.asked[0].images).toEqual(["https://pbs.twimg.com/media/A.jpg"]);
+	expect(w.asked[0].context).toBe("AI agent tiers");
 });
