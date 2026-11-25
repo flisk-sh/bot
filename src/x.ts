@@ -22,6 +22,9 @@ export interface XEnv {
 	X_IGNORE?: string;
 	X_REPLY_LIVE?: string;
 	X_REPLIES_PER_PASS?: string;
+	/** Replies an hour (default 8) and a day (default 60): X hides the replies of an automated account that answers too much. */
+	X_REPLIES_PER_HOUR?: string;
+	X_REPLIES_PER_DAY?: string;
 }
 
 const X_API = "https://api.x.com/2";
@@ -123,6 +126,14 @@ const getState = async (db: D1Like, k: string) =>
 			.bind(k)
 			.first<{ v: string }>()
 	)?.v ?? null;
+// Replies sent in the current hour or day: state \"<bucket>:<count>\", a new bucket starts at 0.
+const bucket = (size: number) => String(Math.floor(Date.now() / size));
+const HOUR = 3600_000;
+const DAY = 24 * HOUR;
+const sentIn = async (db: D1Like, key: string, size: number) => {
+	const [b, n] = String((await getState(db, key)) || "").split(":");
+	return b === bucket(size) ? Number(n) || 0 : 0;
+};
 const setState = (db: D1Like, k: string, v: string) =>
 	db
 		.prepare(
@@ -284,6 +295,19 @@ export async function xPass(
 	}
 	const list = all.sort((a, b) => (idGt(a.id, b.id) ? 1 : -1));
 	const cap = Number(env.X_REPLIES_PER_PASS) || 5;
+	const perHour = Number(env.X_REPLIES_PER_HOUR) || 8;
+	const perDay = Number(env.X_REPLIES_PER_DAY) || 60;
+	const countSent = async () => {
+		for (const [key, size] of [
+			["x_hour", HOUR],
+			["x_day", DAY],
+		] as const)
+			await setState(
+				env.DB,
+				key,
+				`${bucket(size)}:${(await sentIn(env.DB, key, size)) + 1}`,
+			);
+	};
 	let handled = 0;
 	for (const m of list) {
 		out.seen++;
@@ -328,6 +352,14 @@ export async function xPass(
 			out.skipped++;
 			await done();
 			continue;
+		}
+		// Too many replies for this hour or day: stop here, the mention is answered later (X hides the replies of an account that answers too much).
+		if (
+			(await sentIn(env.DB, "x_hour", HOUR)) >= perHour ||
+			(await sentIn(env.DB, "x_day", DAY)) >= perDay
+		) {
+			out.stopped = "reply cap reached for now";
+			break;
 		}
 		handled++;
 		const parentId = (m.referenced_tweets || []).find(
@@ -439,6 +471,7 @@ export async function xPass(
 		);
 		if (post.status === 201) {
 			out.answered++;
+			await countSent();
 			await done();
 			continue;
 		}
