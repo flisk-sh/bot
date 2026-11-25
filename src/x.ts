@@ -190,7 +190,7 @@ export async function xPass(
 	const q: Record<string, string> = {
 		max_results: "20",
 		"tweet.fields": "author_id,referenced_tweets,created_at",
-		expansions: "author_id",
+		expansions: "author_id,referenced_tweets.id",
 		"user.fields": "username",
 	};
 	if (since) q.since_id = since;
@@ -199,6 +199,12 @@ export async function xPass(
 		out.stopped = `mentions answered ${r.status}`;
 		return out;
 	}
+	// The post each mention replies to (X sends it along with the mention), so a question like "is neon good?" has its topic.
+	const parents = new Map<string, string>(
+		((r.json.includes?.tweets || []) as { id: string; text: string }[]).map(
+			(t) => [t.id, t.text],
+		),
+	);
 	const names = new Map<string, string>(
 		((r.json.includes?.users || []) as { id: string; username: string }[]).map(
 			(u) => [u.id, u.username.toLowerCase()],
@@ -261,7 +267,14 @@ export async function xPass(
 				authorization: `Bearer ${env.CHAT_ANSWER_KEY}`,
 				"content-type": "application/json",
 			},
-			body: JSON.stringify({ question, asker: m.author_id }),
+			body: JSON.stringify({
+				question,
+				asker: m.author_id,
+				context: parents.get(
+					(m.referenced_tweets || []).find((t) => t.type === "replied_to")
+						?.id || "",
+				),
+			}),
 			signal: AbortSignal.timeout(25000),
 		}).catch(() => null);
 		// A busy model or an out-of-answers day: stop here, the same mention is tried again next pass. A per-asker cap: skip that one.

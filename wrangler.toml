@@ -30,7 +30,7 @@ BOT_HOMEPAGE = "https://bot.flisk.si"
 X_HANDLE = "askflisk"
 X_ADMIN = "brookservers"
 CHAT_URL = "https://chat.flisk.si"
-# X_REPLY_LIVE = "1"   uncomment only after a dry run looked right
+X_REPLY_LIVE = "1"   # replies are posted; set "0" (or remove) for a dry run that only logs
 
 # The model and the computers (optional). Without the INFERENCE_KEY secret the bot only runs Flisk's own tools.
 #   bunx wrangler@4 secret put INFERENCE_KEY   a key from inference.flisk.si

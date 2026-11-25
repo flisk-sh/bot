@@ -39,6 +39,7 @@ function world(
 	mentions: object[],
 	users: object[],
 	chat = { status: 200, body: { text: "London: rain, 9°C." } },
+	tweets: object[] = [],
 ) {
 	const posts: any[] = [];
 	const asked: any[] = [];
@@ -46,7 +47,7 @@ function world(
 		const u = String(url);
 		if (u.includes("/users/me")) return Response.json({ data: { id: "99" } });
 		if (u.includes("/mentions"))
-			return Response.json({ data: mentions, includes: { users } });
+			return Response.json({ data: mentions, includes: { users, tweets } });
 		if (u.endsWith("/tweets")) {
 			posts.push(JSON.parse(String(init.body)));
 			return Response.json({ data: { id: "1" } }, { status: 201 });
@@ -181,4 +182,27 @@ test("Grok's own reply in the thread is never answered", async () => {
 	expect(r).toMatchObject({ skipped: 1, answered: 0 });
 	expect(w.asked).toEqual([]);
 	expect(state.get("x_since_id")).toBe("40");
+});
+
+test("the post a mention replies to is sent to chat as context", async () => {
+	const { db } = fakeDb({ x_user_id: "99" });
+	const w = world(
+		[
+			{
+				id: "50",
+				text: "@rayan @askflisk is neon good model?",
+				author_id: "5",
+				referenced_tweets: [{ type: "replied_to", id: "49" }],
+			},
+		],
+		[{ id: "5", username: "bob" }],
+		undefined,
+		[{ id: "49", text: "Google just shipped Gemini 4 Neon" }],
+	);
+	await xPass(base(db), w.f, () => {});
+	expect(w.asked[0]).toEqual({
+		question: "is neon good model?",
+		asker: "5",
+		context: "Google just shipped Gemini 4 Neon",
+	});
 });
