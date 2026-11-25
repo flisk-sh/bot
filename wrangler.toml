@@ -58,3 +58,11 @@ service = "flisk-inference"
 #   bunx wrangler@4 secret put CHAT_ANSWER_KEY     the same value as X_BOT_KEY on chat (24+ random characters)
 # Nothing is posted until X_REPLY_LIVE = "1" in [vars]: before that a pass only logs "x dry run: ..." (see bunx wrangler@4 tail).
 # The admin can reply "@askflisk pause" or "@askflisk resume" from @brookservers.
+
+# @askflisk on Bluesky (src/bluesky.ts): the same bot, a second front. Make the account (suggested askflisk.bsky.social), then in
+# Bluesky settings -> Privacy and security -> App passwords make one, and:
+#   bunx wrangler@4 secret put BSKY_HANDLE         askflisk.bsky.social
+#   bunx wrangler@4 secret put BSKY_APP_PASSWORD   the app password (not the account password)
+# CHAT_ANSWER_KEY above is shared. Nothing is posted until BSKY_REPLY_LIVE = "1" (secret or [vars]): before that a pass only logs
+# "bluesky dry run: ...". Caps: BSKY_REPLIES_PER_HOUR (8), BSKY_REPLIES_PER_DAY (60), BSKY_REPLIES_PER_PASS (2).
+# Optional BSKY_ADMIN (comma separated handles) can reply "pause" / "resume"; BSKY_IGNORE lists accounts never answered.
