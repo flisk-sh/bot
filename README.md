@@ -63,7 +63,7 @@ MIT
 
 ## @askflisk on X
 
-Post `@askflisk weather in london` and the bot replies with the answer from [chat.flisk.si](https://chat.flisk.si) (the same free model, live weather and web search as chat, fitted to one post). A cron trigger runs every minute (`src/x.ts`), reads new mentions oldest first, answers each once and remembers the newest one (D1 `state`, key `x_since_id`).
+Post `@askflisk weather in london` and the bot replies with the answer from [chat.flisk.si](https://chat.flisk.si) (the same free model, live weather and web search as chat, fitted to one post). The cron trigger runs every minute (`src/x.ts`; the jobs loop runs on every fifth minute of it, because a free account has only 5 cron triggers), reads new mentions oldest first, answers each once and remembers the newest one (D1 `state`, key `x_since_id`).
 
 1. On chat: `bunx wrangler@4 secret put X_BOT_KEY` (24+ random characters). Chat's `POST /api/answer` answers 404 without it.
 2. In developer.x.com, under the admin account (@brookservers), make an app with Read and Write and generate the Access Token and Secret for @askflisk.

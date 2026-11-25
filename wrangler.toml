@@ -6,9 +6,9 @@ compatibility_date = "2026-10-01"
 routes = [{ pattern = "bot.flisk.si", custom_domain = true }]
 
 # A Worker has no timer, so a cron trigger runs one pass of the work loop (and the idle sweep) every 5 minutes.
-# The second trigger (every minute) answers new @askflisk mentions on X (src/x.ts).
+# One trigger, every minute (a free account has only 5): it answers new @askflisk mentions on X (src/x.ts), and on every fifth minute runs the work loop.
 [triggers]
-crons = ["*/5 * * * *", "* * * * *"]
+crons = ["* * * * *"]
 
 # Sessions (one row per session, like the Flisk agent's checkpoint files) and the board key. Create once:
 #   bunx wrangler@4 d1 create flisk-bot      then put the printed id here

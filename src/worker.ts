@@ -29,7 +29,6 @@ interface Env extends TraceEnv, Omit<XEnv, 'DB'> {
   VISITOR_MESSAGES_PER_DAY?: string;
 }
 
-const X_CRON = '* * * * *';
 const bots = new WeakMap<object, ReturnType<typeof createBot>>();
 function botFor(env: Env) {
   let b = bots.get(env);
@@ -67,17 +66,16 @@ export default {
   // Every response carries the baseline security headers (see security-headers.ts). The root answers 404 JSON for any path the bot
   // does not know, and those errors get the headers too.
   fetch: async (req: Request, env: Env) => withSecurityHeaders(await botFor(env).handle(req)),
-  async scheduled(event: { cron?: string }, env: Env) {
-    // Every minute: answer new @askflisk mentions on X. Every 5 minutes: the jobs board work loop.
-    if (event?.cron === X_CRON) {
-      try {
-        const r = await xPass(env);
-        if (r.stopped && r.stopped !== 'not configured' && r.stopped !== 'paused') await sendTrace(env, { route: '/x', kind: 'error', why: `the X pass stopped: ${r.stopped}`.slice(0, 150) });
-      } catch (e) {
-        await sendTrace(env, { route: '/x', kind: 'error', why: `the X pass threw: ${String((e as Error)?.message || e).slice(0, 120)}` });
-      }
-      return;
+  async scheduled(event: { cron?: string; scheduledTime?: number }, env: Env) {
+    // One trigger, every minute (a free account has only 5 cron triggers): answer new @askflisk mentions on X every minute,
+    // and run the jobs board work loop on every fifth minute.
+    try {
+      const r = await xPass(env);
+      if (r.stopped && r.stopped !== 'not configured' && r.stopped !== 'paused') await sendTrace(env, { route: '/x', kind: 'error', why: `the X pass stopped: ${r.stopped}`.slice(0, 150) });
+    } catch (e) {
+      await sendTrace(env, { route: '/x', kind: 'error', why: `the X pass threw: ${String((e as Error)?.message || e).slice(0, 120)}` });
     }
+    if (new Date(event?.scheduledTime ?? Date.now()).getUTCMinutes() % 5 !== 0) return;
     try {
       const bot = botFor(env);
       await bot.pass();
