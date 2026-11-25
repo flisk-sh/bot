@@ -392,3 +392,28 @@ test("a parent that quotes a post with a picture: the picture of the quoted post
 	expect(w.asked[0].images).toEqual(["https://pbs.twimg.com/media/Q.jpg"]);
 	expect(w.asked[0].context).toContain("AI agent tiers");
 });
+
+test("over the hourly reply cap nothing is answered and the mention waits", async () => {
+	const hour = String(Math.floor(Date.now() / 3600_000));
+	const { db } = fakeDb({ x_user_id: "99", x_hour: `${hour}:8` });
+	const w = world(
+		[{ id: "95", text: "@askflisk hi", author_id: "5" }],
+		[{ id: "5", username: "bob" }],
+	);
+	const r = await xPass(base(db, { X_REPLY_LIVE: "1" }), w.f);
+	expect(r.answered).toBe(0);
+	expect(r.stopped).toContain("cap");
+	expect(w.asked.length).toBe(0);
+});
+
+test("a sent reply is counted for the hour and the day", async () => {
+	const fd = fakeDb({ x_user_id: "99" });
+	const w = world(
+		[{ id: "96", text: "@askflisk hi", author_id: "5" }],
+		[{ id: "5", username: "bob" }],
+	);
+	const r = await xPass(base(fd.db, { X_REPLY_LIVE: "1" }), w.f);
+	expect(r.answered).toBe(1);
+	expect(fd.state.get("x_hour")?.endsWith(":1")).toBe(true);
+	expect(fd.state.get("x_day")?.endsWith(":1")).toBe(true);
+});
