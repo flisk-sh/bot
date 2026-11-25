@@ -39,6 +39,7 @@ export const D1_SCHEMA = [
 ];
 
 export function d1Store(db: D1Like): BotStore {
+  const encoder = new TextEncoder();
   const q = (sql: string, ...a: unknown[]) => db.prepare(sql).bind(...a);
   const iso = (ms: number) => new Date(ms).toISOString();
   return {
@@ -56,7 +57,7 @@ export function d1Store(db: D1Like): BotStore {
     },
     async save(c) {
       const data = JSON.stringify(c);
-      await q('INSERT INTO sessions (id, updated, bytes, data) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET updated = excluded.updated, bytes = excluded.bytes, data = excluded.data', c.sessionId, Date.now(), data.length, data).run();
+      await q('INSERT INTO sessions (id, updated, bytes, data) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET updated = excluded.updated, bytes = excluded.bytes, data = excluded.data', c.sessionId, Date.now(), encoder.encode(data).byteLength, data).run();
     },
     async delete(sessionId) {
       await q('DELETE FROM sessions WHERE id = ?', sessionId).run();

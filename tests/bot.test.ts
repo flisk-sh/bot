@@ -175,13 +175,15 @@ test('the D1 store saves, lists, sweeps chats only, and keeps the board key', as
   const s = d1Store(d1);
   expect(await s.ready()).toBe(true);
   expect((await s.load('chat-a')).messages).toEqual([]);
-  await s.save({ sessionId: 'chat-a', messages: [{ role: 'user', content: 'hi', at: 'x' }] });
+  const chat: Checkpoint = { sessionId: 'chat-a', messages: [{ role: 'user', content: 'Caf\u00e9 \u{1f331}', at: 'x' }] };
+  await s.save(chat);
   await s.save({ sessionId: 'job-1', messages: [] });
-  expect((await s.load('chat-a')).messages.length).toBe(1);
+  expect(await s.load('chat-a')).toEqual(chat);
   const list = await s.list();
   expect(list.map((r) => r.sessionId).sort()).toEqual(['chat-a', 'job-1']);
-  expect(list[0].checkpointBytes).toBeGreaterThan(0);
-  expect((await s.recent(10))[0].c.sessionId).toBeDefined();
+  const bytes = Buffer.byteLength(JSON.stringify(chat), 'utf8');
+  expect(list.find((r) => r.sessionId === 'chat-a')?.checkpointBytes).toBe(bytes);
+  expect((await s.recent(10)).find((r) => r.sessionId === 'chat-a')).toMatchObject({ c: chat, checkpointBytes: bytes });
   expect(await s.sweep(Date.now() + 1000, (id) => id === 'chat-a')).toBe(0); // busy chat stays
   expect(await s.sweep(Date.now() + 1000, () => false)).toBe(1); // idle chat goes, the job session stays
   expect((await s.list()).map((r) => r.sessionId)).toEqual(['job-1']);
