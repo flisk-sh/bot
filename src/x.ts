@@ -18,6 +18,8 @@ export interface XEnv {
 	X_HANDLE?: string;
 	/** The admin account, no @. Its mentions can say "pause" or "resume". */
 	X_ADMIN?: string;
+	/** Accounts the bot never answers, comma separated, no @. Default: grok, so it does not answer Grok's own replies in a thread. */
+	X_IGNORE?: string;
 	X_REPLY_LIVE?: string;
 	X_REPLIES_PER_PASS?: string;
 }
@@ -138,6 +140,13 @@ export async function xPass(
 	let paused = (await getState(env.DB, "x_paused")) === "1";
 	const handle = (env.X_HANDLE || "askflisk").toLowerCase();
 	const admin = (env.X_ADMIN || "brookservers").toLowerCase();
+	const ignore = new Set(
+		(env.X_IGNORE ?? "grok")
+			.toLowerCase()
+			.split(",")
+			.map((x) => x.trim().replace(/^@/, ""))
+			.filter(Boolean),
+	);
 	const live = env.X_REPLY_LIVE === "1";
 	const call = async (
 		method: string,
@@ -209,6 +218,7 @@ export async function xPass(
 		};
 		if (
 			m.author_id === me ||
+			ignore.has(who) ||
 			who === handle ||
 			(m.referenced_tweets || []).some((t) => t.type === "retweeted")
 		) {

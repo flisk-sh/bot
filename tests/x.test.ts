@@ -164,3 +164,21 @@ test("without keys nothing is called", async () => {
 	}) as unknown as typeof fetch);
 	expect(r.stopped).toBe("not configured");
 });
+
+test("Grok's own reply in the thread is never answered", async () => {
+	const { db, state } = fakeDb({ x_user_id: "99" });
+	const w = world(
+		[
+			{
+				id: "40",
+				text: "@brookservers @askflisk Elon Musk is a South African-born engineer",
+				author_id: "8",
+			},
+		],
+		[{ id: "8", username: "grok" }],
+	);
+	const r = await xPass(base(db, { X_REPLY_LIVE: "1" }), w.f);
+	expect(r).toMatchObject({ skipped: 1, answered: 0 });
+	expect(w.asked).toEqual([]);
+	expect(state.get("x_since_id")).toBe("40");
+});
