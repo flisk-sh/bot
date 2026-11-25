@@ -41,6 +41,7 @@ function world(
 	chat = { status: 200, body: { text: "London: rain, 9°C." } },
 	tweets: object[] = [],
 	media: object[] = [],
+	lookup: object | null = null,
 ) {
 	const posts: any[] = [];
 	const asked: any[] = [];
@@ -48,6 +49,7 @@ function world(
 	const f = (async (url: string, init: RequestInit = {}) => {
 		const u = String(url);
 		if (u.includes("/users/me")) return Response.json({ data: { id: "99" } });
+		if (/\/tweets\/\d+/.test(u) && lookup) return Response.json(lookup);
 		if (u.includes("/mentions"))
 			return Response.json({
 				data: mentions,
@@ -348,4 +350,45 @@ test("the pictures of the post being replied to are sent to chat, photos only", 
 	expect(r.answered).toBe(1);
 	expect(w.asked[0].images).toEqual(["https://pbs.twimg.com/media/A.jpg"]);
 	expect(w.asked[0].context).toBe("AI agent tiers");
+});
+
+test("a parent that quotes a post with a picture: the picture of the quoted post is sent", async () => {
+	const { db } = fakeDb({ x_user_id: "99" });
+	const w = world(
+		[
+			{
+				id: "91",
+				text: "@askflisk missing askflisk",
+				author_id: "5",
+				referenced_tweets: [{ type: "replied_to", id: "71" }],
+			},
+		],
+		[{ id: "5", username: "bob" }],
+		{ status: 200, body: { text: "Not on the list." } },
+		[{ id: "71", text: "https://t.co/abc" }],
+		[],
+		{
+			data: { id: "71", referenced_tweets: [{ type: "quoted", id: "60" }] },
+			includes: {
+				tweets: [
+					{
+						id: "60",
+						text: "AI agent tiers",
+						attachments: { media_keys: ["q1"] },
+					},
+				],
+				media: [
+					{
+						media_key: "q1",
+						type: "photo",
+						url: "https://pbs.twimg.com/media/Q.jpg",
+					},
+				],
+			},
+		},
+	);
+	const r = await xPass(base(db, { X_REPLY_LIVE: "1" }), w.f);
+	expect(r.answered).toBe(1);
+	expect(w.asked[0].images).toEqual(["https://pbs.twimg.com/media/Q.jpg"]);
+	expect(w.asked[0].context).toContain("AI agent tiers");
 });

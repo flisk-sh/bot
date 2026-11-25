@@ -334,7 +334,37 @@ export async function xPass(
 		const images = [
 			...photosOf(parentMedia.get(parentId || ""), photos),
 			...photosOf(m.attachments, photos),
-		].slice(0, 2);
+		];
+		// A parent that is a quote post (or shows only links) keeps its picture on the post it quotes: look that post up too.
+		let context = parents.get(parentId || "");
+		if (!images.length && parentId) {
+			const r = await call("GET", `/tweets/${parentId}`, {
+				"tweet.fields": "attachments,referenced_tweets",
+				expansions:
+					"attachments.media_keys,referenced_tweets.id,referenced_tweets.id.attachments.media_keys",
+				"media.fields": "type,url",
+			}).catch(() => null);
+			if (r && r.status === 200) {
+				const found = new Map<string, string>();
+				for (const md of (r.json.includes?.media || []) as {
+					media_key: string;
+					type: string;
+					url?: string;
+				}[])
+					if (md.type === "photo" && md.url) found.set(md.media_key, md.url);
+				const quoted = (r.json.includes?.tweets || []) as {
+					text: string;
+					attachments?: { media_keys?: string[] };
+				}[];
+				images.push(
+					...photosOf(r.json.data?.attachments, found),
+					...quoted.flatMap((t) => photosOf(t.attachments, found)),
+				);
+				if (quoted[0]?.text)
+					context = `${context || ""} ${quoted[0].text}`.trim();
+			}
+		}
+		images.splice(2);
 		const chat = (env.CHAT_URL || "https://chat.flisk.si").replace(/\/+$/, "");
 		const a = await fetchImpl(`${chat}/api/answer`, {
 			method: "POST",
@@ -346,10 +376,7 @@ export async function xPass(
 				question,
 				asker: m.author_id,
 				...(images.length ? { images } : {}),
-				context: parents.get(
-					(m.referenced_tweets || []).find((t) => t.type === "replied_to")
-						?.id || "",
-				),
+				context,
 			}),
 			signal: AbortSignal.timeout(25000),
 		}).catch(() => null);
