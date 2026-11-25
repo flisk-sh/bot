@@ -291,3 +291,18 @@ test("more than one page of mentions: the oldest pending is answered first and n
 	expect(state.get("x_since_id")).toBe("1005");
 	expect(r.seen).toBeGreaterThanOrEqual(5);
 });
+
+test("an app chat built is posted as the answer plus its link", async () => {
+	const { db } = fakeDb({ x_user_id: "99" });
+	const w = world(
+		[{ id: "80", text: "@askflisk make me crm", author_id: "5" }],
+		[{ id: "5", username: "bob" }],
+		{
+			status: 200,
+			body: { text: "Built it.", link: "https://chat.flisk.si/s/abc" } as any,
+		},
+	);
+	const r = await xPass(base(db, { X_REPLY_LIVE: "1" }), w.f);
+	expect(r.answered).toBe(1);
+	expect(w.posts[0].text).toBe("Built it. https://chat.flisk.si/s/abc");
+});
