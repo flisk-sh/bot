@@ -34,6 +34,7 @@ export const X_CONFIGURED = (e: XEnv) =>
 		e.CHAT_ANSWER_KEY
 	);
 
+const MAX_PAGES = 10;
 const byCode = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0); // OAuth sorts by byte value, not by locale
 const enc = (s: string) =>
 	encodeURIComponent(s).replace(
@@ -222,25 +223,39 @@ export async function xPass(
 		"user.fields": "username",
 	};
 	if (since) q.since_id = since;
-	const r = await call("GET", `/users/${me}/mentions`, q);
-	if (r.status !== 200) {
-		out.stopped = `mentions answered ${r.status}`;
-		return out;
+	// X returns mentions newest first, 20 a page. All pages since the last finished mention are read before anything is answered, so
+	// the oldest pending mention is always answered first and none is passed over. A page that fails stops the pass: answering only
+	// the newer pages would move the cursor past the older ones. (More than MAX_PAGES x 20 pending, an old backlog: the oldest are dropped.)
+	const all: Mention[] = [];
+	const parents = new Map<string, string>();
+	const names = new Map<string, string>();
+	let token: string | undefined;
+	for (let page = 0; page < MAX_PAGES; page++) {
+		const r = await call(
+			"GET",
+			`/users/${me}/mentions`,
+			token ? { ...q, pagination_token: token } : q,
+		);
+		if (r.status !== 200) {
+			out.stopped = `mentions answered ${r.status}`;
+			return out;
+		}
+		all.push(...((r.json.data || []) as Mention[]));
+		// The post each mention replies to (X sends it along with the mention), so a question like "is neon good?" has its topic.
+		for (const t of (r.json.includes?.tweets || []) as {
+			id: string;
+			text: string;
+		}[])
+			parents.set(t.id, t.text);
+		for (const u of (r.json.includes?.users || []) as {
+			id: string;
+			username: string;
+		}[])
+			names.set(u.id, u.username.toLowerCase());
+		token = r.json.meta?.next_token;
+		if (!token) break;
 	}
-	// The post each mention replies to (X sends it along with the mention), so a question like "is neon good?" has its topic.
-	const parents = new Map<string, string>(
-		((r.json.includes?.tweets || []) as { id: string; text: string }[]).map(
-			(t) => [t.id, t.text],
-		),
-	);
-	const names = new Map<string, string>(
-		((r.json.includes?.users || []) as { id: string; username: string }[]).map(
-			(u) => [u.id, u.username.toLowerCase()],
-		),
-	);
-	const list = ((r.json.data || []) as Mention[]).sort((a, b) =>
-		idGt(a.id, b.id) ? 1 : -1,
-	);
+	const list = all.sort((a, b) => (idGt(a.id, b.id) ? 1 : -1));
 	const cap = Number(env.X_REPLIES_PER_PASS) || 5;
 	let handled = 0;
 	for (const m of list) {
@@ -319,10 +334,16 @@ export async function xPass(
 			out.stopped = "chat is out of answers today";
 			break;
 		}
-		if (a.status !== 200 || !body.text) {
-			out.skipped++;
-			await done();
-			continue;
+		if (!(a.status === 200 && body.text)) {
+			// Only what is about this one asker is given up on: their daily cap, or a question chat cannot read. Anything else (a wrong or missing
+			// key is a 404, a 401, a 403) is about the service, not the mention: stop and keep the mention for the next pass.
+			if ((a.status === 429 && body.kind === "asker") || a.status === 400) {
+				out.skipped++;
+				await done();
+				continue;
+			}
+			out.stopped = `chat answered ${a.status}`;
+			break;
 		}
 		if (!live) {
 			log(

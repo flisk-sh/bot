@@ -238,3 +238,56 @@ test("a picture from chat is uploaded and attached to the reply", async () => {
 	expect(w.posts[0].media).toEqual({ media_ids: ["m1"] });
 	expect(w.posts[0].text).toBe("Here you go.");
 });
+
+test("a chat that answers 404 (wrong or missing key) keeps the mention for the next pass", async () => {
+	const { db, state } = fakeDb({ x_user_id: "99" });
+	const w = world(
+		[{ id: "70", text: "@askflisk hi", author_id: "5" }],
+		[{ id: "5", username: "bob" }],
+		{ status: 404, body: { error: "not found" } as any },
+	);
+	const r = await xPass(base(db, { X_REPLY_LIVE: "1" }), w.f);
+	expect(r.stopped).toContain("404");
+	expect(state.get("x_since_id")).toBeUndefined();
+	// A per-asker cap is given up on, and the cursor moves on.
+	const w2 = world(
+		[{ id: "71", text: "@askflisk hi", author_id: "5" }],
+		[{ id: "5", username: "bob" }],
+		{ status: 429, body: { kind: "asker" } as any },
+	);
+	const r2 = await xPass(base(db, { X_REPLY_LIVE: "1" }), w2.f);
+	expect(r2.skipped).toBe(1);
+	expect(state.get("x_since_id")).toBe("71");
+});
+
+test("more than one page of mentions: the oldest pending is answered first and none is lost", async () => {
+	const { db, state } = fakeDb({ x_user_id: "99" });
+	const mk = (id: number) => ({
+		id: String(1000 + id),
+		text: `@askflisk q${id}`,
+		author_id: "5",
+	});
+	const page1 = Array.from({ length: 20 }, (_, i) => mk(25 - i)); // newest first: 25..6
+	const page2 = Array.from({ length: 5 }, (_, i) => mk(5 - i)); // 5..1
+	const asked: string[] = [];
+	const f = (async (url: string, init: RequestInit = {}) => {
+		const u = String(url);
+		if (u.includes("/mentions")) {
+			const second = u.includes("pagination_token=t2");
+			return Response.json({
+				data: second ? page2 : page1,
+				includes: { users: [{ id: "5", username: "bob" }] },
+				meta: second ? {} : { next_token: "t2" },
+			});
+		}
+		if (u.endsWith("/api/answer")) {
+			asked.push(JSON.parse(String(init.body)).question);
+			return Response.json({ text: "ok" });
+		}
+		return new Response("?", { status: 404 });
+	}) as unknown as typeof fetch;
+	const r = await xPass(base(db), f, () => {});
+	expect(asked).toEqual(["q1", "q2", "q3", "q4", "q5"]);
+	expect(state.get("x_since_id")).toBe("1005");
+	expect(r.seen).toBeGreaterThanOrEqual(5);
+});
