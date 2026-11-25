@@ -5,8 +5,9 @@ import { fleetComputer, wolfModel } from './brain';
 import { withSecurityHeaders } from './security-headers';
 import { sendTrace, traced, type TraceEnv } from './trace';
 import { d1Store, type D1Like } from './stores';
+import { xPass, type XEnv } from './x';
 
-interface Env extends TraceEnv {
+interface Env extends TraceEnv, Omit<XEnv, 'DB'> {
   DB: D1Like;
   JOBS_URL: string;
   JOBS_PUBLIC_URL?: string;
@@ -65,7 +66,16 @@ export default {
   // Every response carries the baseline security headers (see security-headers.ts). The root answers 404 JSON for any path the bot
   // does not know, and those errors get the headers too.
   fetch: async (req: Request, env: Env) => withSecurityHeaders(await botFor(env).handle(req)),
-  async scheduled(_event: unknown, env: Env) {
+  async scheduled(event: { cron?: string; scheduledTime?: number }, env: Env) {
+    // One trigger, every minute (a free account has only 5 cron triggers): answer new @askflisk mentions on X every minute,
+    // and run the jobs board work loop on every fifth minute.
+    try {
+      const r = await xPass(env);
+      if (r.stopped && r.stopped !== 'not configured' && r.stopped !== 'paused') await sendTrace(env, { route: '/x', kind: 'error', why: `the X pass stopped: ${r.stopped}`.slice(0, 150) });
+    } catch (e) {
+      await sendTrace(env, { route: '/x', kind: 'error', why: `the X pass threw: ${String((e as Error)?.message || e).slice(0, 120)}` });
+    }
+    if (new Date(event?.scheduledTime ?? Date.now()).getUTCMinutes() % 5 !== 0) return;
     try {
       const bot = botFor(env);
       await bot.pass();
