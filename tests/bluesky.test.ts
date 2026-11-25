@@ -171,7 +171,7 @@ test("picturesOf reads photos, a video preview and a quoted post's photo", () =>
 			$type: "video",
 			thumbnail: "https://video.bsky.app/x/thumbnail.jpg",
 		}),
-	).toEqual([]);
+	).toEqual(["https://video.bsky.app/x/thumbnail.jpg"]);
 	expect(picturesOf({ thumbnail: cdn("v") })).toEqual([cdn("v")]);
 	expect(
 		picturesOf({ record: { embeds: [{ images: [{ thumb: cdn("q") }] }] } }),
