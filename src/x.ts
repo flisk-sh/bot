@@ -328,6 +328,7 @@ export async function xPass(
 		const body = (await a.json().catch(() => ({}))) as {
 			text?: string;
 			image?: string;
+			link?: string;
 			kind?: string;
 		};
 		if (a.status === 429 && body.kind === "day") {
@@ -353,6 +354,7 @@ export async function xPass(
 			await done();
 			continue;
 		}
+		const tweetText = body.link ? `${body.text} ${body.link}` : body.text;
 		const mediaId = body.image
 			? await upload(body.image).catch(() => null)
 			: null;
@@ -364,7 +366,7 @@ export async function xPass(
 				text:
 					body.image && !mediaId
 						? "I drew it but X would not take the picture. Try again in a minute."
-						: body.text,
+						: tweetText,
 				reply: { in_reply_to_tweet_id: m.id },
 				...(mediaId ? { media: { media_ids: [mediaId] } } : {}),
 			},
