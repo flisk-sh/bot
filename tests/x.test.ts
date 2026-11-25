@@ -313,7 +313,7 @@ test("an app chat built is posted as the answer plus its link", async () => {
 	expect(w.posts[0].text).toBe("Built it. https://chat.flisk.si/s/abc");
 });
 
-test("the pictures of the post being replied to are sent to chat, photos only", async () => {
+test("the pictures of the post being replied to are sent to chat, photos and the preview frame of videos", async () => {
 	const { db } = fakeDb({ x_user_id: "99" });
 	const w = world(
 		[
@@ -342,13 +342,17 @@ test("the pictures of the post being replied to are sent to chat, photos only", 
 			{
 				media_key: "v1",
 				type: "video",
-				url: "https://pbs.twimg.com/media/V.jpg",
+				preview_image_url:
+					"https://pbs.twimg.com/ext_tw_video_thumb/1/pu/img/V.jpg",
 			},
 		],
 	);
 	const r = await xPass(base(db, { X_REPLY_LIVE: "1" }), w.f);
 	expect(r.answered).toBe(1);
-	expect(w.asked[0].images).toEqual(["https://pbs.twimg.com/media/A.jpg"]);
+	expect(w.asked[0].images).toEqual([
+		"https://pbs.twimg.com/media/A.jpg",
+		"https://pbs.twimg.com/ext_tw_video_thumb/1/pu/img/V.jpg",
+	]);
 	expect(w.asked[0].context).toBe("AI agent tiers");
 });
 

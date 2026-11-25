@@ -232,7 +232,7 @@ export async function xPass(
 		"tweet.fields": "author_id,referenced_tweets,created_at,attachments",
 		expansions:
 			"author_id,referenced_tweets.id,attachments.media_keys,referenced_tweets.id.attachments.media_keys",
-		"media.fields": "type,url",
+		"media.fields": "type,url,preview_image_url",
 		"user.fields": "username",
 	};
 	if (since) q.since_id = since;
@@ -269,8 +269,11 @@ export async function xPass(
 			media_key: string;
 			type: string;
 			url?: string;
-		}[])
-			if (md.type === "photo" && md.url) photos.set(md.media_key, md.url);
+			preview_image_url?: string;
+		}[]) {
+			const u = md.type === "photo" ? md.url : md.preview_image_url;
+			if (u) photos.set(md.media_key, u);
+		}
 		for (const u of (r.json.includes?.users || []) as {
 			id: string;
 			username: string;
@@ -342,7 +345,7 @@ export async function xPass(
 				"tweet.fields": "attachments,referenced_tweets",
 				expansions:
 					"attachments.media_keys,referenced_tweets.id,referenced_tweets.id.attachments.media_keys",
-				"media.fields": "type,url",
+				"media.fields": "type,url,preview_image_url",
 			}).catch(() => null);
 			if (r && r.status === 200) {
 				const found = new Map<string, string>();
@@ -350,8 +353,11 @@ export async function xPass(
 					media_key: string;
 					type: string;
 					url?: string;
-				}[])
-					if (md.type === "photo" && md.url) found.set(md.media_key, md.url);
+					preview_image_url?: string;
+				}[]) {
+					const u = md.type === "photo" ? md.url : md.preview_image_url;
+					if (u) found.set(md.media_key, u);
+				}
 				const quoted = (r.json.includes?.tweets || []) as {
 					text: string;
 					attachments?: { media_keys?: string[] };
