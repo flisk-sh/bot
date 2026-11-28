@@ -71,4 +71,20 @@ describe('signed approvals (FND-07)', () => {
       reason: 'invalid_signature',
     });
   });
+
+  test('prevents delimiter collision across fields', () => {
+    const usedIds = new Set<string>();
+    const p1 = { id: 'a|h1', action_hash: 'h2', business: 'acme', commit_sha: 'abc', amount_usd: 10, expires_at: 2000 };
+    const p2 = { id: 'a', action_hash: 'h1', business: 'h2|acme', commit_sha: 'abc', amount_usd: 10, expires_at: 2000 };
+    const signed1 = signApproval(p1, SECRET);
+    const forged2 = { payload: p2, signature: signed1.signature };
+
+    expect(
+      verifyAndConsumeApproval(
+        forged2,
+        { action_hash: p2.action_hash, business: p2.business, commit_sha: p2.commit_sha, amount_usd: p2.amount_usd },
+        { secret: SECRET, usedIds, now: 1000 },
+      ),
+    ).toEqual({ ok: false, reason: 'invalid_signature' });
+  });
 });

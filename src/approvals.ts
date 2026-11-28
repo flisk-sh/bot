@@ -24,7 +24,7 @@ export function verifyWebhookSignature(rawBody: string, headerSig: string | null
 }
 
 function canonicalApprovalString(p: ApprovalPayload): string {
-  return `${p.id}|${p.action_hash}|${p.business}|${p.commit_sha}|${p.amount_usd}|${p.expires_at}`;
+  return JSON.stringify([p.id, p.action_hash, p.business, p.commit_sha, p.amount_usd, p.expires_at]);
 }
 
 export function signApproval(payload: ApprovalPayload, secret: string): SignedApproval {
